@@ -1,0 +1,4 @@
+- `Christina Hedges <https://github.com/christinahedges>`_
+- `Nicholas Saunders <https://github.com/nksaunders>`_
+- `Geert Barentsen <https://github.com/barentsen>`_
+- `Michael Gully-Santiago <https://github.com/gully>`_
