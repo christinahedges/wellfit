@@ -28,3 +28,12 @@ fit.to_pandas()
 fit.to_latex()
 
 '''
+
+import logging
+logging.basicConfig(format='%(message)s')
+log = logging.getLogger('WELLFIT')
+
+
+from .planet import Planet
+from .star import Star
+from .model import Model
