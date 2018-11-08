@@ -28,30 +28,3 @@ fit.to_pandas()
 fit.to_latex()
 
 '''
-
-class fitter(object):
-    '''Something to fit transits...
-
-    This should let us fit with MCMC or basic scipy minimize
-    '''
-    def __init__(self, method='mcmc'):
-
-    def __repr__(self):
-        return 'i am a fitter'
-
-
-
-class model(object):
-    '''Something to model transits...
-
-
-    There are lots of different models and they have different APIs. This would be a way to collect them all
-    Alternatively...we should just pick one. Maybe starry.
-    '''
-
-    def __init__(self, model_package='batman, starry, ktransit, pytransit'):
-        '''Some initial parameters'''
-
-
-    def __repr__(self):
-        return 'i am a model'
