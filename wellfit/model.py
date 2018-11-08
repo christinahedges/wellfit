@@ -28,16 +28,26 @@ import celerite
 from celerite import terms
 
 #['log_sigma', 'log_rho']
-fit_params =  {'host':[], 'planet':['rprs', 'period', 't0', 'inclination'], 'GP':['log_sigma', 'log_rho']}
+fit_params =  {'host':[], 'planet':['rprs', 'period', 't0', 'inclination', 'eccentricity'], 'GP':['log_sigma', 'log_rho']}
 
 class Model(object):
     '''Combined model of a star and companions.
     '''
 
-    def __init__(self, host=None, planets=None, log_sigma=6, log_rho=5,
+    def __init__(self, host=None, planets=None, use_gps=False, log_sigma=6, log_rho=5,
                 log_sigma_error=(-0.5, 0.5), log_rho_error=(-0.5, 0.5)):
 
+        self.use_gps = use_gps
         self.fit_params = fit_params
+        if not self.use_gps:
+            self.fit_params['GP'] = []
+
+        # Validate everything
+        if host is not None:
+            host._validate()
+        if planets is not None:
+            for planet in planets:
+                planet._validate()
 
         self.host = host
         if isinstance(planets, list):
@@ -63,7 +73,6 @@ class Model(object):
                 l.append(u.Quantity(np.copy(getattr(self.planets[idx], f))).value)
         self.initial_guess = l
 
-        self.use_gps = len(self.fit_params['GP']) > 0
         if self.use_gps:
             log.info('Using Gaussian Process to fit long term trends. This will make fitting slower, but more accurate.')
             # Store GP model Parameters
@@ -88,7 +97,7 @@ class Model(object):
         return s
 
 
-    def plot(self, time, flux, flux_error, ax=None, **kwargs):
+    def plot(self, time, flux=None, flux_error=None, ax=None, **kwargs):
         if ax is None:
             _, ax = plt.subplots(1)
         f = self.compute(time, flux, flux_error)
@@ -199,7 +208,7 @@ class Model(object):
         self.gp.set_parameter_vector(params)
         return -self.gp.grad_log_likelihood(y)[1]
 
-    def compute(self, time, flux, flux_error, return_gradient=False):
+    def compute(self, time, flux=None, flux_error=None, return_gradient=False):
         ''' Compute a single instance of a transit model
 
         THIS SHOULD RETURN A GRADIENT
@@ -213,10 +222,20 @@ class Model(object):
         self.system.compute(time, gradient=True)
         model_flux = self.system.lightcurve
 
-        dm_dy = [self.system.gradient[label] for label in self._gradient_labels]
-        gradient = np.nansum(2 * (model_flux - flux) * dm_dy / flux_error ** 2, axis=1)
+        if return_gradient:
+            if flux is None:
+                raise ValueError('`flux` is None. When using gradients, compute must be passed the flux with errors.')
+            if flux_error is None:
+                raise ValueError('`flux_error` is None. When using gradients, compute must be passed the flux with errors.')
+            dm_dy = [self.system.gradient[label] for label in self._gradient_labels]
+            gradient = np.nansum(2 * (model_flux - flux) * dm_dy / flux_error ** 2, axis=1)
 
         if self.use_gps:
+            if flux is None:
+                raise ValueError('`flux` is None. When using GPs, compute must be passed the flux with errors.')
+            if flux_error is None:
+                raise ValueError('`flux_error` is None. When using GPs, compute must be passed the flux with errors.')
+
             self.gp.compute(time[model_flux == 1], flux[model_flux == 1])
             mu, var = self.gp.predict(flux[model_flux == 1], time, return_var=True)
             if return_gradient:
@@ -262,8 +281,8 @@ class Model(object):
         log.info('------------------\n')
         log.info(string)
         self.res = minimize(self._likelihood, self.initial_guess, args=(time, flux, flux_error),
-                       jac=True, method='TNC', bounds=self.bounds, options={**kwargs}, callback=callback)
-
+                       jac=True, method='TNC', bounds=self.bounds, options=kwargs, callback=callback)
+        self.best_fit = self.res.x
 
     def plot_bounds(self, time, flux, flux_error, n=500, ax=None):
         if ax is None:
@@ -271,9 +290,13 @@ class Model(object):
         ax.errorbar(time, flux, flux_error, label='Data')
         model_flux = self._likelihood(self.initial_guess, time, flux, flux_error, return_model=True)
         ax.plot(time, model_flux, color='r', lw=2, label='Initial Guess')
-        plt.legend()
         for i in range(n):
             model_flux = self._likelihood(self._draw_from_bounds(), time, flux, flux_error, return_model=True)
+            if i==0:
+                ax.plot(time, model_flux, color='C1', alpha=np.max([0.05, 1/(n/10)]), label='Random Draw From Bounds')
+                leg = plt.legend()
+                for lh in leg.legendHandles:
+                    lh.set_alpha(1)
             ax.plot(time, model_flux, color='C1', alpha=np.max([0.05, 1/(n/10)]))
         ax.set_title('Bounds')
         # Back to the initial parameters

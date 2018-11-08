@@ -1,6 +1,5 @@
 mastDownload
 .ipynb_checkpoints
 __pycache__
-*.ipynb
 dev/
 wellfit.egg-info

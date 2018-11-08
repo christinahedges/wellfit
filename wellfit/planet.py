@@ -3,7 +3,10 @@
 import starry
 import astropy.units as u
 import numpy as np
+import pandas as pd
 from .utils import sep
+
+
 # We should have a better dependency than CT for this.
 # This is just to get the NExSci data table.
 
@@ -18,7 +21,7 @@ class Planet(object):
     '''Companion class
     '''
 
-    def __init__(self, host=None, rprs=1, period=10, t0=0, inclination=90, omega=0, eccentricity=0, multi=False, lum=0,
+    def __init__(self, host, rprs=0.01, period=10, t0=0, inclination=90, omega=0, eccentricity=0, multi=False, lum=0,
                      rprs_error=None, period_error=None, t0_error=None, inclination_error=None, omega_error=None, eccentricity_error=None):
         self.host = host
         self.rprs = rprs
@@ -98,10 +101,12 @@ class Planet(object):
 
     @property
     def properties(self):
-        s = ''
-        for p in ['rprs', 'period', 't0', 'inclination', 'eccentricity']:
-            s += '{} : {} $\pm$ {} \n'.format(p, getattr(self, p), getattr(self, p + '_error'))
-        return s
+        df = pd.DataFrame(columns=['Value', 'Lower Bound', 'Upper Bound'])
+        for idx, p in enumerate(['rprs', 'period', 't0', 'inclination', 'eccentricity']):
+            df.loc[p, 'Value'] = getattr(self, p)
+            df.loc[p, 'Lower Bound'] = getattr(self, p + '_error')[0]
+            df.loc[p, 'Upper Bound'] = getattr(self, p + '_error')[1]
+        return df
 
     @property
     def model(self):

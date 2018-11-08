@@ -4,6 +4,9 @@
 import starry
 import astropy.units as u
 import numpy as np
+import pandas as pd
+
+
 # We should have a better dependency than CT for this.
 # This is just to get the NExSci data table.
 
@@ -66,10 +69,12 @@ class Star(object):
 
     @property
     def properties(self):
-        s = ''
-        for p in ['radius', 'mass', 'temperature', 'limb_darkening']:
-            s += '{} : {} $\pm$ {} \n'.format(p, getattr(self, p), getattr(self, p + '_error'))
-        return s
+        df = pd.DataFrame(columns=['Value', 'Lower Bound', 'Upper Bound'])
+        for idx, p in enumerate(['radius', 'mass', 'temperature', 'limb_darkening']):
+            df.loc[p, 'Value'] = getattr(self, p)
+            df.loc[p, 'Lower Bound'] = getattr(self, p + '_error')[0]
+            df.loc[p, 'Upper Bound'] = getattr(self, p + '_error')[1]
+        return df
 
     @property
     def model(self):
