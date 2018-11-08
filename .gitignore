@@ -3,3 +3,4 @@ mastDownload
 __pycache__
 *.ipynb
 dev/
+wellfit.egg-info

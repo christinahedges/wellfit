@@ -12,7 +12,7 @@ if "release" in sys.argv[-1]:
 
 
 # Load the __version__ variable without importing the package already
-exec(open('wellfit/version.py').read())
+exec(open('wellfit/__version__.py').read())
 
 setup(name='wellfit',
       version=__version__,
