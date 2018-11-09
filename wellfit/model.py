@@ -14,14 +14,8 @@ from scipy.optimize import minimize
 from .star import Star
 from .planet import Planet
 from . import utils
-from .wellfit import log
+from .wellfit import log, df
 import logging
-
-
-# We should have a better dependency than CT for this.
-# This is just to get the NExSci data table.
-import characterizethis as ct
-df = ct.data()
 
 from lightkurve import MPLSTYLE
 

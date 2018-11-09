@@ -6,12 +6,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
-
-# We should have a better dependency than CT for this.
-# This is just to get the NExSci data table.
-
-import characterizethis as ct
-df = ct.data()
+from .wellfit import log, df
 
 units = {'mass': getattr(u, 'solMass'),
          'radius': getattr(u, 'solRad'),

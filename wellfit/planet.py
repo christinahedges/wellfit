@@ -6,12 +6,7 @@ import numpy as np
 import pandas as pd
 from .utils import sep
 
-
-# We should have a better dependency than CT for this.
-# This is just to get the NExSci data table.
-
-import characterizethis as ct
-df = ct.data()
+from .wellfit import log, df
 
 units = {'period': getattr(u, 'day')}
 
