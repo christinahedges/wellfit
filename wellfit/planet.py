@@ -21,7 +21,7 @@ class Planet(object):
     '''Companion class
     '''
 
-    def __init__(self, host, rprs=0.01, period=10, t0=0, inclination=90, omega=0, eccentricity=0, multi=False, lum=0,
+    def __init__(self, host=None, rprs=0.01, period=10, t0=0, inclination=90, omega=0, eccentricity=0, multi=False, lum=0,
                      rprs_error=None, period_error=None, t0_error=None, inclination_error=None, omega_error=None, eccentricity_error=None):
         self.host = host
         self.rprs = rprs
@@ -131,4 +131,4 @@ class Planet(object):
 
 
     def __repr__(self):
-        return ('Planet: RpRs {} , {}'.format(self.rprs, self.period))
+        return ('Planet: RpRs {} , P {}, t0 {}'.format(self.rprs, self.period,self.t0))

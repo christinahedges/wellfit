@@ -4,6 +4,7 @@ import starry
 import astropy.units as u
 import numpy as np
 import matplotlib.pyplot as plt
+from copy import deepcopy
 import string
 from datetime import datetime
 
@@ -38,7 +39,7 @@ class Model(object):
                 log_sigma_error=(-0.5, 0.5), log_rho_error=(-0.5, 0.5)):
 
         self.use_gps = use_gps
-        self.fit_params = fit_params
+        self.fit_params = deepcopy(fit_params)
         if not self.use_gps:
             self.fit_params['GP'] = []
 
