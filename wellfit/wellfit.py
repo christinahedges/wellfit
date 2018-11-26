@@ -33,13 +33,11 @@ import logging
 logging.basicConfig(format='%(message)s')
 log = logging.getLogger('WELLFIT')
 
-
-from .planet import Planet
-from .star import Star
-from .model import Model
-
-
 # We should have a better dependency than CT for this.
 # This is just to get the NExSci data table.
 import characterizethis as ct
 df = ct.get_data()
+
+from .planet import Planet
+from .star import Star
+from .model import Model
