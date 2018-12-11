@@ -4,7 +4,7 @@ import starry
 import astropy.units as u
 import numpy as np
 import pandas as pd
-from .utils import sep
+from .utils import sep, alphabet
 
 from .wellfit import log, df
 
@@ -99,11 +99,16 @@ class Planet(object):
 
     @property
     def properties(self):
-        df = pd.DataFrame(columns=['Value', 'Lower Bound', 'Upper Bound'])
-        for idx, p in enumerate(['rprs', 'period', 't0', 'inclination', 'eccentricity']):
-            df.loc[p, 'Value'] = getattr(self, p)
-            df.loc[p, 'Lower Bound'] = getattr(self, p + '_error')[0]
-            df.loc[p, 'Upper Bound'] = getattr(self, p + '_error')[1]
+        name = '\emph{Planet}'
+        df = pd.DataFrame(columns=[name])
+        df.loc['Radius ($R_{jup}$)', name] = '{} $R_{{jup}}$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.radius.value, 3), np.round(self.radius_error[0], 4), np.round(self.radius_error[1], 4))
+        df.loc['Period', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.period.value, 4), np.round(self.period_error[0], 6), np.round(self.period_error[1], 6))
+        df.loc['Transit Midpoint', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.t0, 4), np.round(self.t0_error[0], 6), np.round(self.t0_error[1], 6))
+        df.loc['Transit Duration', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.duration.value, 4), np.round(self.duration_error[0], 6), np.round(self.duration_error[1], 6))
+        df.loc['$R_p/R_*$', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.rprs, 4), np.round(self.rprs_error[0],6), np.round(self.rprs_error[1], 6))
+        df.loc['Inclination', name] = '{} $^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.inclination, 2), np.round(self.inclination_error[0], 3), np.round(self.inclination_error[1], 3))
+        df.loc['Eccentricity', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.eccentricity, 2), np.round(self.eccentricity_error[0], 3), np.round(self.eccentricity_error[1], 3))
+        df.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.separation, 2), np.round(self.separation_error[0], 3), np.round(self.separation_error[1], 3))
         return df
 
     @property

@@ -88,15 +88,9 @@ class Model(object):
         for idx in range(self.nplanets):
             for f in self.fit_params['planet']:
                 l.append(u.Quantity(np.copy(getattr(self.planets[idx], f))).value)
+        self._best_guess = l
         self.initial_guess = l
 
-        l = []
-        for jdx in range(self.nplanets):
-             for idx, f in enumerate(self.fit_params['planet']):
-                 l.append(tuple(np.asarray(np.copy(getattr(self.planets[jdx], f + '_error'))) + self.initial_guess[(jdx * len(self.fit_params['planet'])) + idx]))
-        for f in self.fit_params['GP']:
-            l.append(tuple([getattr(self, f) + getattr(self, f + '_error')[0], getattr(self, f) + getattr(self, f + '_error')[1]]))
-        self.initial_bounds = l
 
         if self.use_gps:
             log.info('Using Gaussian Process to fit long term trends. This will make fitting slower, but more accurate.')
@@ -112,10 +106,19 @@ class Model(object):
 
             for f in self.fit_params['GP']:
                 l.append(getattr(self, f))
-            self.initial_guess = l
+            self._best_guess = l
 
-        self._is_eccen = np.where([l.split('.')[1] == 'eccentricity' for l in self._fit_labels])[0]
-        self._is_inc = np.where([l.split('.')[1] == 'inclination' for l in self._fit_labels])[0]
+
+        l = []
+        for jdx in range(self.nplanets):
+             for idx, f in enumerate(self.fit_params['planet']):
+                 l.append(tuple(np.asarray(np.copy(getattr(self.planets[jdx], f + '_error'))) + self._best_guess[(jdx * len(self.fit_params['planet'])) + idx]))
+        for f in self.fit_params['GP']:
+            l.append(tuple([getattr(self, f) + getattr(self, f + '_error')[0], getattr(self, f) + getattr(self, f + '_error')[1]]))
+        self.initial_bounds = l
+
+        self._is_eccen = np.where([l.split('.')[-1] == 'eccentricity' for l in self._fit_labels])[0]
+        self._is_inc = np.where([l.split('.')[-1] == 'inclination' for l in self._fit_labels])[0]
         self.nwalkers = 100
         self.burnin = 200
         self.nsteps = 1000
@@ -176,7 +179,7 @@ class Model(object):
         l = []
         for jdx in range(self.nplanets):
              for idx, f in enumerate(self.fit_params['planet']):
-                 l.append(tuple(np.asarray(np.copy(getattr(self.planets[jdx], f + '_error'))) + self.initial_guess[(jdx * len(self.fit_params['planet'])) + idx]))
+                 l.append(tuple(np.asarray(np.copy(getattr(self.planets[jdx], f + '_error'))) + self._best_guess[(jdx * len(self.fit_params['planet'])) + idx]))
         for f in self.fit_params['GP']:
             l.append(tuple([getattr(self, f) + getattr(self, f + '_error')[0], getattr(self, f) + getattr(self, f + '_error')[1]]))
         return l
@@ -329,6 +332,7 @@ class Model(object):
 
 
     def fit_mcmc(self, time, flux, flux_err, threads=8):
+        self._best_guess = self.best_fit
         ndim = len(self.best_fit)
         # Work around for the starry pickle bug
         global _wellfit_toy_model
@@ -380,42 +384,30 @@ class Model(object):
         log.info('scipy.minimize fit')
         log.info('------------------\n')
         log.info(string)
-        self.res = minimize(self._likelihood, self.initial_guess, args=(time, flux, flux_error),
+        self.res = minimize(self._likelihood, self._best_guess, args=(time, flux, flux_error),
                        jac=True, method='TNC', bounds=self.bounds, options=kwargs, callback=callback)
         self.best_fit = self.res.x
 
 
 
-    def print_results(self):
-        if 'sampler' not in self.__dir__():
-            raise ValueError("Please run wf.self.fit_mcmc() to find errors before printing results.")
+    def to_latex(self):
+#        if 'sampler' not in self.__dir__():
+#            raise ValueError("Please run wf.self.fit_mcmc() to find errors before printing results.")
 
-        df = pd.DataFrame(columns=['\textbf{Host Star}'])
-        df.loc['Radius', '\textbf{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.host.radius.value, self.host.radius_error[0], self.host.radius_error[1])
-        df.loc['Mass', '\textbf{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.host.mass.value, self.host.mass_error[0], self.host.mass_error[1])
-        df.loc['T_{eff}', '\textbf{Host Star}'] = '{} K $\pm$_{{{}}}^{{{}}}'.format(int(self.host.temperature.value), int(self.host.temperature_error[0]), int(self.host.temperature_error[1]))
+        host_df = self.host.properties
 
-        idx = 0
-        cols = ['\textbf{{Planet {}}}'.format(utils.alphabet[idx + 1]) for idx in range(len(self.planets))]
-        df1 = pd.DataFrame(columns=cols)
-
-
+        planet_df = None
         for idx in range(len(self.planets)):
             planet = self.planets[idx]
-            name = '\textbf{{Planet {}}}'.format(utils.alphabet[idx + 1])
+            name = '\emph{{Planet {}}}'.format(utils.alphabet[idx + 1])
+            df = planet.properties
+            df.columns = [name]
+            if planet_df is None:
+                planet_df = df
+            else:
+                planet_df = planet_df.join(df)
 
-            df1.loc['Radius ($R_{jup}$)', name] = '{} $R_{{jup}}$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.radius.value, 3), np.round(planet.radius_error[0], 4), np.round(planet.radius_error[1], 4))
-            df1.loc['Period', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.period.value, 4), np.round(planet.period_error[0], 6), np.round(planet.period_error[1], 6))
-            df1.loc['Transit Midpoint', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.t0, 4), np.round(planet.t0_error[0], 6), np.round(planet.t0_error[1], 6))
-            df1.loc['Transit Duration', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.duration.value, 4), np.round(planet.duration_error[0], 6), np.round(planet.duration_error[1], 6))
-            df1.loc['$R_p/R_*$', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.rprs, 4), np.round(planet.rprs_error[0],6), np.round(planet.rprs_error[1], 6))
-            df1.loc['Inclination', name] = '{} $^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.inclination, 2), np.round(planet.inclination_error[0], 3), np.round(planet.inclination_error[1], 3))
-            df1.loc['Eccentricity', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.eccentricity, 2), np.round(planet.eccentricity_error[0], 3), np.round(planet.eccentricity_error[1], 3))
-            df1.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.separation, 2), np.round(planet.separation_error[0], 3), np.round(planet.separation_error[1], 3))
-
-
-        print('{}\n{}'.format(df.to_latex(escape=False), df1.to_latex(escape=False)))
-        return
+        return('{}\n{}'.format(host_df.to_latex(escape=False), planet_df.to_latex(escape=False)))
 
 
     def plot_corner(self):
@@ -428,13 +420,17 @@ class Model(object):
                                    truths=self.best_fit)
         return cornerplot
 
-    def plot_burnin(self):
+    def plot_burnin(self, show_bounds=True):
         ndim = len(self.best_fit)
         fig, axs = plt.subplots(ndim, figsize=(10, 16))
         for i in range(ndim):
             _ = axs[i].plot(self.sampler.chain[:, 0:, i].T, alpha=0.1, color='k');
             axs[i].set_ylabel(self._fit_labels[i])
             axs[i].axvline(self.burnin)
+            if show_bounds:
+                axs[i].axhline(self.bounds[i][0])
+                axs[i].axhline(self.bounds[i][1])
+
         return fig
 
 
@@ -442,7 +438,7 @@ class Model(object):
         if ax is None:
             _, ax = plt.subplots()
         ax.errorbar(time, flux, flux_error, label='Data')
-        model_flux = self._likelihood(self.initial_guess, time, flux, flux_error, return_model=True)
+        model_flux = self._likelihood(self._best_guess, time, flux, flux_error, return_model=True)
         ax.plot(time, model_flux, color='r', lw=2, label='Initial Guess')
         for i in range(n):
             model_flux = self._likelihood(self._draw_from_bounds(), time, flux, flux_error, return_model=True)
@@ -454,7 +450,7 @@ class Model(object):
             ax.plot(time, model_flux, color='C1', alpha=np.max([0.05, 1/(n/10)]))
         ax.set_title('Bounds')
         # Back to the initial parameters
-        reset = self._likelihood(self.initial_guess, time, flux, flux_error, return_model=True)
+        reset = self._likelihood(self._best_guess, time, flux, flux_error, return_model=True)
         return ax
 
 
@@ -473,7 +469,7 @@ class Model(object):
         for jdx in range(n):
             for idx, k in enumerate(self.fit_params['planet']):
                 ax[jdx, idx].plot(self.bounds[(npar*jdx) + idx], [1,1], zorder=-1, label='Bounds', lw=1)
-                ax[jdx, idx].scatter(self.initial_guess[(npar*jdx) + idx], 1, s=150, c='r', label='Initial Guess')
+                ax[jdx, idx].scatter(self._best_guess[(npar*jdx) + idx], 1, s=150, c='r', label='Initial Guess')
                 ax[jdx, idx].scatter(self.res.x[(npar*jdx) + idx], 1, s=60, c='b', label='Best Fit')
                 ax[jdx, idx].set_title(k)
                 ax[jdx, idx].set_yticks([])
@@ -484,7 +480,7 @@ class Model(object):
             jdx += 1
             for idx, k in enumerate(self.fit_params['GP']):
                 ax[jdx, idx].plot(self.bounds[(npar*jdx) + idx], [1,1], zorder=-1, label='Bounds', lw=1)
-                ax[jdx, idx].scatter(self.initial_guess[(npar*jdx) + idx], 1, s=150, c='r', label='Initial Guess')
+                ax[jdx, idx].scatter(self._best_guess[(npar*jdx) + idx], 1, s=150, c='r', label='Initial Guess')
                 ax[jdx, idx].scatter(self.res.x[(npar*jdx) + idx], 1, s=60, c='b', label='Best Fit')
                 ax[jdx, idx].set_title(k)
                 ax[jdx, idx].set_yticks([])

@@ -64,11 +64,14 @@ class Star(object):
 
     @property
     def properties(self):
-        df = pd.DataFrame(columns=['Value', 'Lower Bound', 'Upper Bound'])
-        for idx, p in enumerate(['radius', 'mass', 'temperature', 'limb_darkening']):
-            df.loc[p, 'Value'] = getattr(self, p)
-            df.loc[p, 'Lower Bound'] = getattr(self, p + '_error')[0]
-            df.loc[p, 'Upper Bound'] = getattr(self, p + '_error')[1]
+
+        df = pd.DataFrame(columns=['\emph{Host Star}'])
+        df.loc['Radius', '\emph{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.radius.value, self.radius_error[0], self.radius_error[1])
+        df.loc['Mass', '\emph{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.mass.value, self.mass_error[0], self.mass_error[1])
+        df.loc['T_{eff}', '\emph{Host Star}'] = '{} K $\pm$_{{{}}}^{{{}}}'.format(int(self.temperature.value), int(self.temperature_error[0]), int(self.temperature_error[1]))
+        df.loc['Limb Darkening 1', '\emph{Host Star}'] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.limb_darkening[0], 2), np.round(self.limb_darkening_error[0], 2), np.round(self.limb_darkening_error[1], 2))
+        df.loc['Limb Darkening 2', '\emph{Host Star}'] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.limb_darkening[1], 2), np.round(self.limb_darkening_error[0], 2), np.round(self.limb_darkening_error[1], 2))
+
         return df
 
     @property
