@@ -126,6 +126,7 @@ class Model(object):
         global _wellfit_toy_model
         _wellfit_toy_model = None
 
+        
 
 
     def __repr__(self):
@@ -284,6 +285,26 @@ class Model(object):
             return model_flux, gradient
         return model_flux
 
+
+
+    def fit(self, time, flux, flux_error, **kwargs):
+        start = datetime.now()
+        def callback(args):
+            t = (datetime.now() - start).seconds / 60
+            string = '    ' + ''.join(['{}'.format(np.round(f, 6)) + ''.join([' '] * (15 - len('{}'.format(np.round(f, 6))))) for f in args])
+            string += ('{}'.format(np.round(t, 2)))
+            log.info(string)
+
+        string = '    ' + ''.join(['{0:15s}'.format(f) for f in self._fit_labels])
+        log.info('scipy.minimize fit')
+        log.info('------------------\n')
+        log.info(string)
+        self.res = minimize(self._likelihood, self._best_guess, args=(time, flux, flux_error),
+                       jac=True, method='TNC', bounds=self.bounds, options=kwargs, callback=callback)
+        self.best_fit = self.res.x
+
+
+
     def _likelihood(self, params, time, flux=None, flux_error=None, return_model=False, return_gradients=True):
         # Update planet
         # Use only the planet parameters
@@ -305,19 +326,17 @@ class Model(object):
             return chisq, gradient
         return chisq
 
-
     def _prior(self, params):
         for idx, p in enumerate(params):
-            e = getattr(self.planets[0], self._fit_labels[idx].split('.')[1] + '_error')
-            if (p < self.best_fit[idx] + e[0]) | (p > self.best_fit[idx] + e[1]):
+#            e = getattr(self.planets[0], self._fit_labels[idx].split('.')[1] + '_error')
+            e = self.bounds[idx]
+            if (p < e[0]) | (p > e[1]):
                 return -np.inf
         if params[self._is_eccen] < 0:
             return -np.inf
         if params[self._is_inc] > 90:
             return -np.inf
         return 0.0
-
-
 
     @property
     def _mcmc_starting_points(self):
@@ -331,8 +350,20 @@ class Model(object):
         return pos
 
 
+    def _assign(self):
+        ans = []
+        for label, i in  zip(self._fit_labels, range(ndim)):
+            med = np.median(self.sampler.chain[:, self.burnin:, i])
+            low = np.percentile(self.sampler.chain[:, self.burnin:, i], 16)
+            high = np.percentile(self.sampler.chain[:, self.burnin:, i], 84)
+            self._update_planet([label], [med])
+            self._update_planet(['{}_error'.format(label)], [(low - med, high - med)])
+            ans.append(med)
+        self._best_guess = ans
+        self.best_fit = ans
+
     def fit_mcmc(self, time, flux, flux_err, threads=8):
-        self._best_guess = self.best_fit
+        #self._best_guess = self.best_fit
         ndim = len(self.best_fit)
         # Work around for the starry pickle bug
         global _wellfit_toy_model
@@ -363,30 +394,9 @@ class Model(object):
         log.info('Setting results...')
         ndim = len(self.best_fit)
         samples = self.sampler.chain[:, self.burnin:, :].reshape((-1, ndim))
-        for label, ans in  zip(self._fit_labels, map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
-                                     zip(*np.percentile(samples, [16, 50, 84],
-                                                        axis=0)))):
-            self._update_planet([label], [ans[0]])
-            self._update_planet(['{}_error'.format(label)], [(-ans[1], ans[2])])
+        self._assign()
 
 
-
-
-    def fit(self, time, flux, flux_error, **kwargs):
-        start = datetime.now()
-        def callback(args):
-            t = (datetime.now() - start).seconds / 60
-            string = '    ' + ''.join(['{}'.format(np.round(f, 6)) + ''.join([' '] * (15 - len('{}'.format(np.round(f, 6))))) for f in args])
-            string += ('{}'.format(np.round(t, 2)))
-            log.info(string)
-
-        string = '    ' + ''.join(['{0:15s}'.format(f) for f in self._fit_labels])
-        log.info('scipy.minimize fit')
-        log.info('------------------\n')
-        log.info(string)
-        self.res = minimize(self._likelihood, self._best_guess, args=(time, flux, flux_error),
-                       jac=True, method='TNC', bounds=self.bounds, options=kwargs, callback=callback)
-        self.best_fit = self.res.x
 
 
 
@@ -428,8 +438,10 @@ class Model(object):
             axs[i].set_ylabel(self._fit_labels[i])
             axs[i].axvline(self.burnin)
             if show_bounds:
-                axs[i].axhline(self.bounds[i][0])
-                axs[i].axhline(self.bounds[i][1])
+                axs[i].axhline(self.bounds[i][0], ls='--')
+                axs[i].axhline(self.bounds[i][1], ls='--')
+                axs[i].axhline(self.best_fit[i])
+
 
         return fig
 
