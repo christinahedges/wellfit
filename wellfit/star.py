@@ -74,7 +74,7 @@ class Star(object):
         df = pd.DataFrame(columns=['\emph{Host Star}'])
         df.loc['Radius', '\emph{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.radius.value, self.radius_error[0], self.radius_error[1])
         df.loc['Mass', '\emph{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.mass.value, self.mass_error[0], self.mass_error[1])
-        df.loc['T_{eff}', '\emph{Host Star}'] = '{} K $\pm$_{{{}}}^{{{}}}'.format(int(self.temperature.value), int(self.temperature_error[0]), int(self.temperature_error[1]))
+        df.loc['T_{eff}', '\emph{Host Star}'] = '{} $K$ $\pm$_{{{}}}^{{{}}}'.format(int(self.temperature.value), int(self.temperature_error[0]), int(self.temperature_error[1]))
         df.loc['Luminosity', '\emph{Host Star}'] = '{} L$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.luminosity.value, 3), np.round(self.luminosity_error[0], 3), np.round(self.luminosity_error[1], 3))
         df.loc['Limb Darkening 1 ($u$)', '\emph{Host Star}'] = '{}'.format(np.round(self.limb_darkening[0], 2))
         df.loc['Limb Darkening 2 ($a$)', '\emph{Host Star}'] = '{}'.format(np.round(self.limb_darkening[1], 2))
