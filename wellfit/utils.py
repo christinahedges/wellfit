@@ -3,6 +3,9 @@
 import astropy.units as u
 from astropy.constants import G
 import numpy as np
+import pandas as pd
+
+from . import PACKAGEDIR
 
 starry_translation = {'radius':'r', 'separation':'a',
                       't0':'tref', 'porb':'period',
@@ -23,6 +26,9 @@ starry_labels = {'rprs' : 'r',
                  'omega':'Omega',
                  'eccentricity':'ecc'}
 
+class WellFitException(Exception):
+    '''Raised when there is a really fit error.'''
+    pass
 
 def sep(period, st_mass):
     separation = (((G*st_mass/(4*np.pi**2)) * (period)**2)**(1/3)).to(u.solRad)
@@ -33,3 +39,5 @@ def dur(period, st_radius, pl_radius, st_mass):
     separation = sep(period, st_mass)
     duration = period * np.arcsin(((st_radius + pl_radius.to(u.solRad))**2 - (b*st_radius)**2)**0.5/separation).value/np.pi
     return duration
+
+ld_table = pd.read_csv('{}/data/limb_darkening.csv'.format(PACKAGEDIR), comment='#')

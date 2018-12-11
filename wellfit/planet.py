@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from .utils import sep, alphabet
 
+from astropy.constants import sigma_sb
+
 from .wellfit import log, df
 
 units = {'period': getattr(u, 'day')}
@@ -109,6 +111,7 @@ class Planet(object):
         df.loc['Inclination', name] = '{} $^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.inclination, 2), np.round(self.inclination_error[0], 3), np.round(self.inclination_error[1], 3))
         df.loc['Eccentricity', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.eccentricity, 2), np.round(self.eccentricity_error[0], 3), np.round(self.eccentricity_error[1], 3))
         df.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.separation, 2), np.round(self.separation_error[0], 3), np.round(self.separation_error[1], 3))
+        df.loc['Effective Temperature', name] = '{} K $\pm$_{{{}}}^{{{}}}'.format(int(self.effective_temperature.value), int(self.effective_temperature_error[0]), int(self.effective_temperature_error[1]))
         return df
 
     @property
@@ -130,9 +133,9 @@ class Planet(object):
     @property
     def separation_error(self):
         e = []
-        for idx in [0, 1]:
-            p = (self.period - self.period_error[idx]*self.period.unit)
-            m = (self.host.mass - self.host.mass_error[idx]*self.host.mass.unit)
+        for idx, jdx in [0, 1], [1, 0]:
+            p = (self.period - self.period_error[jdx]*self.period.unit)
+            m = (self.host.mass - self.host.mass_error[jdx]*self.host.mass.unit)
             r = (self.host.radius - self.host.radius_error[idx]*self.host.radius.unit)
             e.append((sep(p, m)/r).value - self.separation)
         return tuple(e)
@@ -161,8 +164,8 @@ class Planet(object):
     @property
     def duration_error(self):
         e = []
-        for idx in [1, 0]:
-            a = self.separation + self.separation_error[idx]
+        for idx, jdx in [0, 1], [1, 0]:
+            a = self.separation + self.separation_error[jdx]
             inc = self.inclination + self.inclination_error[idx]
             rstar = self.host.radius + self.host.radius_error[idx]*self.host.radius.unit
             rpl = (self.radius + self.radius_error[idx]*self.radius.unit).to(u.solRad)
@@ -172,6 +175,21 @@ class Planet(object):
             l = ((rstar + rpl)**2 + (b * rstar)**2)**0.5
             l /= (a * rstar)
             e.append((np.arcsin(l.value) * p/np.pi - self.duration).value)
+        return tuple(e)
+
+    @property
+    def effective_temperature(self):
+        return ((self.host.luminosity/(16 * np.pi * sigma_sb * (self.separation * self.host.radius)**2))**0.25).to(u.K)
+
+    @property
+    def effective_temperature_error(self):
+        e = []
+        for idx, jdx in [1, 0], [0, 1]:
+            a = self.separation + self.separation_error[jdx]
+            rstar = self.host.radius + self.host.radius_error[jdx]*self.host.radius.unit
+            l = self.host.luminosity + self.host.luminosity_error[idx]*self.host.luminosity.unit
+            e1 = ((l/(16 * np.pi * sigma_sb * (a * rstar)**2))**0.25).to(u.K)
+            e.append((e1 - self.effective_temperature).value)
         return tuple(e)
 
 

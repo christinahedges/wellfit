@@ -31,7 +31,7 @@ import corner
 
 def _prob(params, time, flux, flux_error):
     if _wellfit_toy_model is None:
-        raise WellFitException('You do not have a `_wellfit_toy_model` variable set.'
+        raise utils.WellFitException('You do not have a `_wellfit_toy_model` variable set.'
                                 'This should not be possible. Please report this error')
     lp = _wellfit_toy_model._prior(params)
     if not np.isfinite(lp):
@@ -41,10 +41,6 @@ def _prob(params, time, flux, flux_error):
 
 #['log_sigma', 'log_rho']
 fit_params =  {'host':[], 'planet':['rprs', 'period', 't0', 'inclination', 'eccentricity'], 'GP':['log_sigma', 'log_rho']}
-
-class WellFitException(Exception):
-    '''Raised when there is a really fit error.'''
-    pass
 
 
 class Model(object):
@@ -126,7 +122,7 @@ class Model(object):
         global _wellfit_toy_model
         _wellfit_toy_model = None
 
-        
+
 
 
     def __repr__(self):
@@ -351,6 +347,8 @@ class Model(object):
 
 
     def _assign(self):
+        ndim = len(self.best_fit)
+
         ans = []
         for label, i in  zip(self._fit_labels, range(ndim)):
             med = np.median(self.sampler.chain[:, self.burnin:, i])

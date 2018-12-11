@@ -6,7 +6,10 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
+from astropy.constants import sigma_sb
+
 from .wellfit import log, df
+from .utils import ld_table, WellFitException
 
 units = {'mass': getattr(u, 'solMass'),
          'radius': getattr(u, 'solRad'),
@@ -18,17 +21,20 @@ default_bounds = {'radius_error':(-0.1, 0.1), 'mass_error':(-0.1, 0.1), 'tempera
 class Star(object):
     '''Primary star class'''
 
-    def __init__(self, radius=1, mass=1, temperature=5777, limb_darkening=[0.4, 0.26],
-                 radius_error=None, mass_error=None, temperature_error=None, limb_darkening_error=None):
-        self.limb_darkening = limb_darkening
+    def __init__(self, radius=1, mass=1, temperature=5777,
+                 radius_error=None, mass_error=None, temperature_error=None):
         self.radius = u.Quantity(radius, u.solRad)
         self.mass = u.Quantity(mass, u.solMass)
         self.temperature = u.Quantity(temperature, u.K)
         self.radius_error = radius_error
         self.mass_error = mass_error
         self.temperature_error = temperature_error
-        self.limb_darkening_error = limb_darkening_error
 
+        t = ld_table[(ld_table.teff == (self.temperature.value)//250 * 250) & (ld_table.met == 0) & (ld_table.logg == 5)]
+        if len(t) == 0:
+            raise WellFitException('Can not find limb darkening parameters. This should not happen. Please report this error.')
+        self.limb_darkening = [t.iloc[0].u, t.iloc[0].a]
+        print(self.limb_darkening)
         self._validate()
 
         self._init_model = starry.kepler.Primary()
@@ -44,7 +50,7 @@ class Star(object):
 
     def _validate_errors(self):
         '''Ensure the bounds are physical'''
-        for key in ['radius_error', 'mass_error', 'temperature_error', 'limb_darkening_error']:
+        for key in ['radius_error', 'mass_error', 'temperature_error']:
             if getattr(self,key) is None:
                 setattr(self, key, default_bounds[key])
             if ~np.isfinite(getattr(self,key)[0]):
@@ -69,8 +75,9 @@ class Star(object):
         df.loc['Radius', '\emph{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.radius.value, self.radius_error[0], self.radius_error[1])
         df.loc['Mass', '\emph{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.mass.value, self.mass_error[0], self.mass_error[1])
         df.loc['T_{eff}', '\emph{Host Star}'] = '{} K $\pm$_{{{}}}^{{{}}}'.format(int(self.temperature.value), int(self.temperature_error[0]), int(self.temperature_error[1]))
-        df.loc['Limb Darkening 1', '\emph{Host Star}'] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.limb_darkening[0], 2), np.round(self.limb_darkening_error[0], 2), np.round(self.limb_darkening_error[1], 2))
-        df.loc['Limb Darkening 2', '\emph{Host Star}'] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.limb_darkening[1], 2), np.round(self.limb_darkening_error[0], 2), np.round(self.limb_darkening_error[1], 2))
+        df.loc['Luminosity', '\emph{Host Star}'] = '{} L$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.luminosity.value, 3), np.round(self.luminosity_error[0], 3), np.round(self.luminosity_error[1], 3))
+        df.loc['Limb Darkening 1 ($u$)', '\emph{Host Star}'] = '{}'.format(np.round(self.limb_darkening[0], 2))
+        df.loc['Limb Darkening 2 ($a$)', '\emph{Host Star}'] = '{}'.format(np.round(self.limb_darkening[1], 2))
 
         return df
 
@@ -82,3 +89,16 @@ class Star(object):
 
     def show(self):
         self.model.show()
+
+    @property
+    def luminosity(self):
+        return (4 * np.pi * self.radius**2 * sigma_sb * self.temperature**4).to(u.solLum)
+
+    @property
+    def luminosity_error(self):
+        e = []
+        for idx in [0, 1]:
+            r = self.radius + self.radius_error[idx] * self.radius.unit
+            t = self.temperature + self.temperature_error[idx] * self.temperature.unit
+            e.append(((4 * np.pi * r**2 * sigma_sb * t**4).to(u.solLum) - self.luminosity).value)
+        return tuple(e)
