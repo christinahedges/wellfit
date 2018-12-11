@@ -23,8 +23,10 @@ class Planet(object):
         self.period = u.Quantity(period, u.day)
         self.t0 = t0
         self.inclination = inclination
+        self._init_inclination = inclination
         self.omega = omega
         self.eccentricity = eccentricity
+        self._init_eccentricity = eccentricity
         self.lum = lum
 
         self.rprs_error = rprs_error
@@ -46,7 +48,7 @@ class Planet(object):
 
     def _validate_errors(self):
         '''Ensure the bounds are physical'''
-        for key in ['rprs_error', 'period_error','t0_error','inclination_error','eccentricity_error']:
+        for key in ['rprs_error', 'period_error', 't0_error', 'inclination_error', 'eccentricity_error']:
             if getattr(self,key) is None:
                 setattr(self, key, default_bounds[key])
             if ~np.isfinite(getattr(self,key)[0]):
@@ -55,21 +57,22 @@ class Planet(object):
                 setattr(self,  key, tuple([getattr(self, key)[0], default_bounds[key][1]]))
 
         if self.eccentricity + self.eccentricity_error[0] < 0:
-            self.eccentricity_error = tuple([-self.eccentricity, self.eccentricity_error[1]])
+            self.eccentricity_error = tuple([-self._init_eccentricity, self.eccentricity_error[1]])
 
         if self.eccentricity + self.eccentricity_error[1] > 1:
-            self.eccentricity_error = tuple([self.eccentricity_error[0], 1 - self.eccentricity])
+            self.eccentricity_error = tuple([self.eccentricity_error[0], 1 - self._init_eccentricity])
 
-        if self.inclination + self.inclination_error[1] > 90:
-            self.inclination_error = tuple([self.inclination_error[0], 90 - self.inclination])
+        if self.inclination + self.inclination_error[1] > 90.:
+            self.inclination_error = tuple([self.inclination_error[0], 90. - self._init_inclination])
+
 
 
     @staticmethod
-    def from_nexsci(name, host):
+    def from_nexsci(name, host, sigma=10):
         # Get data
         ok = np.where(df.pl_hostname + df.pl_letter == name)[0]
         if len(ok) == 0:
-            raise ValueError('No star named {}'.format(name))
+            raise ValueError('No planet named {}.'.format(name))
         d = df.iloc[ok]
 
         # Get params
@@ -84,11 +87,11 @@ class Planet(object):
             ecc = [0]
 
         # Get errors
-        rprs_error = tuple([d.iloc[0].pl_radjerr2/(host.radius.to(u.jupiterRad).value) * 3, d.iloc[0].pl_radjerr1/(host.radius.to(u.jupiterRad).value) * 3])
-        period_error = tuple([d.iloc[0].pl_orbpererr2 * 3, d.iloc[0].pl_orbpererr1 * 3])
-        t0_error = tuple([d.iloc[0].pl_tranmiderr2 * 3, d.iloc[0].pl_tranmiderr1 * 3])
-        inclination_error = tuple([d.iloc[0].pl_orbinclerr2 * 3, d.iloc[0].pl_orbinclerr1 * 3])
-        eccentricity_error = tuple([d.iloc[0].pl_eccenerr2 * 3, d.iloc[0].pl_eccenerr1 * 3])
+        rprs_error = tuple([d.iloc[0].pl_radjerr2/(host.radius.to(u.jupiterRad).value) * sigma, d.iloc[0].pl_radjerr1/(host.radius.to(u.jupiterRad).value) * sigma])
+        period_error = tuple([d.iloc[0].pl_orbpererr2 * sigma, d.iloc[0].pl_orbpererr1 * sigma])
+        t0_error = tuple([d.iloc[0].pl_tranmiderr2 * sigma, d.iloc[0].pl_tranmiderr1 * sigma])
+        inclination_error = tuple([d.iloc[0].pl_orbinclerr2 * sigma, d.iloc[0].pl_orbinclerr1 * sigma])
+        eccentricity_error = tuple([d.iloc[0].pl_eccenerr2 * sigma, d.iloc[0].pl_eccenerr1 * sigma])
 
         return Planet(host, rprs=rprs[0], period=period[0], t0=t0[0], inclination=inc[0], omega=0, eccentricity=ecc[0],
                       rprs_error=rprs_error, period_error=period_error, t0_error=t0_error, inclination_error=inclination_error,
@@ -107,7 +110,6 @@ class Planet(object):
     def model(self):
         self._init_model.L = self.lum
         self._init_model.ecc = self.eccentricity
-        self._init_model.w = self.omega
         self._init_model.r = self.rprs
         self._init_model.porb = u.Quantity(self.period, u.day).value
         self._init_model.a = self.separation
@@ -121,8 +123,51 @@ class Planet(object):
         return (sep(self.period, self.host.mass)/self.host.radius).value
 
     @property
+    def separation_error(self):
+        e = []
+        for idx in [0, 1]:
+            p = (self.period - self.period_error[idx]*self.period.unit)
+            m = (self.host.mass - self.host.mass_error[idx]*self.host.mass.unit)
+            r = (self.host.radius - self.host.radius_error[idx]*self.host.radius.unit)
+            e.append((sep(p, m)/r).value - self.separation)
+        return tuple(e)
+
+    @property
     def radius(self):
         return (self.rprs * self.host.radius).to(u.jupiterRad)
+
+    @property
+    def radius_error(self):
+        e = []
+        for idx in [0, 1]:
+            er1 = self.rprs_error[idx]/self.rprs
+            er2 = self.host.radius_error[idx]/self.host.radius.value
+            er = (er1**2 + er2**2)**0.5
+            e.append(er * self.radius.value * (-1)**(idx - 1))
+        return tuple(e)
+
+    @property
+    def duration(self):
+        b = self.separation * np.cos(self.inclination * np.pi/180)
+        l = ((self.host.radius + self.radius.to(u.solRad))**2 + (b * self.host.radius)**2)**0.5
+        l /= (self.separation*self.host.radius)
+        return np.arcsin(l.value) * self.period/np.pi
+
+    @property
+    def duration_error(self):
+        e = []
+        for idx in [1, 0]:
+            a = self.separation + self.separation_error[idx]
+            inc = self.inclination + self.inclination_error[idx]
+            rstar = self.host.radius + self.host.radius_error[idx]*self.host.radius.unit
+            rpl = (self.radius + self.radius_error[idx]*self.radius.unit).to(u.solRad)
+            p = (self.period - self.period_error[idx]*self.period.unit)
+
+            b = a * np.cos(inc * np.pi/180)
+            l = ((rstar + rpl)**2 + (b * rstar)**2)**0.5
+            l /= (a * rstar)
+            e.append((np.arcsin(l.value) * p/np.pi - self.duration).value)
+        return tuple(e)
 
 
     def __repr__(self):

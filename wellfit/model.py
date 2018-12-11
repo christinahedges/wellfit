@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 import string
 from datetime import datetime
+import pandas as pd
+import sys
 
 from scipy.optimize import minimize
 
@@ -22,8 +24,28 @@ from lightkurve import MPLSTYLE
 import celerite
 from celerite import terms
 
+import emcee
+import corner
+
+
+
+def _prob(params, time, flux, flux_error):
+    if _wellfit_toy_model is None:
+        raise WellFitException('You do not have a `_wellfit_toy_model` variable set.'
+                                'This should not be possible. Please report this error')
+    lp = _wellfit_toy_model._prior(params)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp - _wellfit_toy_model._likelihood(params, time, flux, flux_error, return_gradients=False)
+
+
 #['log_sigma', 'log_rho']
 fit_params =  {'host':[], 'planet':['rprs', 'period', 't0', 'inclination', 'eccentricity'], 'GP':['log_sigma', 'log_rho']}
+
+class WellFitException(Exception):
+    '''Raised when there is a really fit error.'''
+    pass
+
 
 class Model(object):
     '''Combined model of a star and companions.
@@ -68,6 +90,14 @@ class Model(object):
                 l.append(u.Quantity(np.copy(getattr(self.planets[idx], f))).value)
         self.initial_guess = l
 
+        l = []
+        for jdx in range(self.nplanets):
+             for idx, f in enumerate(self.fit_params['planet']):
+                 l.append(tuple(np.asarray(np.copy(getattr(self.planets[jdx], f + '_error'))) + self.initial_guess[(jdx * len(self.fit_params['planet'])) + idx]))
+        for f in self.fit_params['GP']:
+            l.append(tuple([getattr(self, f) + getattr(self, f + '_error')[0], getattr(self, f) + getattr(self, f + '_error')[1]]))
+        self.initial_bounds = l
+
         if self.use_gps:
             log.info('Using Gaussian Process to fit long term trends. This will make fitting slower, but more accurate.')
             # Store GP model Parameters
@@ -83,6 +113,16 @@ class Model(object):
             for f in self.fit_params['GP']:
                 l.append(getattr(self, f))
             self.initial_guess = l
+
+        self._is_eccen = np.where([l.split('.')[1] == 'eccentricity' for l in self._fit_labels])[0]
+        self._is_inc = np.where([l.split('.')[1] == 'inclination' for l in self._fit_labels])[0]
+        self.nwalkers = 100
+        self.burnin = 200
+        self.nsteps = 400
+        # Work around for the starry pickle bug.
+        global _wellfit_toy_model
+        _wellfit_toy_model = None
+
 
 
     def __repr__(self):
@@ -149,7 +189,7 @@ class Model(object):
 
 
     def _update_host(self, parameters, values):
-        '''Update the host parameters in the model.
+        '''Update the host parameters in the self.
         '''
         if not isinstance(parameters, (list, np.ndarray)):
             raise ValueError("Parameters must be a list or numpy array.")
@@ -163,7 +203,7 @@ class Model(object):
 
 
     def _update_planet(self, parameters, values):
-        '''Update the planet parameters in the model.
+        '''Update the planet parameters in the self.
         '''
         if not isinstance(parameters, (list, np.ndarray)):
             raise ValueError("Parameters must be a list or numpy array.")
@@ -182,7 +222,6 @@ class Model(object):
     def _update_model(self):
         for p in range(self.nplanets):
             self.system.secondaries[p].ecc = self.planets[p].eccentricity
-            self.system.secondaries[p].w = self.planets[p].omega
             self.system.secondaries[p].r = self.planets[p].rprs
             self.system.secondaries[p].porb = u.Quantity(self.planets[p].period, u.day).value
             self.system.secondaries[p].a = self.planets[p].separation
@@ -242,7 +281,7 @@ class Model(object):
             return model_flux, gradient
         return model_flux
 
-    def _likelihood(self, params, time, flux, flux_error, return_model=False):
+    def _likelihood(self, params, time, flux=None, flux_error=None, return_model=False, return_gradients=True):
         # Update planet
         # Use only the planet parameters
         ok = (self.nplanets) * len(self.fit_params['planet'])
@@ -252,14 +291,83 @@ class Model(object):
             self.log_sigma, self.log_rho = params[ok:]
             self.gp.set_parameter_vector(params[ok:])
 
-        model_flux, gradient = self.compute(time, flux, flux_error, return_gradient=True)
+        model_flux, gradient = self.compute(time, flux=flux, flux_error=flux_error, return_gradient=True)
         if return_model:
             return model_flux
 
         chisq = np.nansum((flux - model_flux)**2 / flux_error**2)
 #            dm_dy = [self.system.gradient[label] for label in self._gradient_labels]
 #            gradient = np.nansum(2 * (model_flux - flux) * dm_dy / flux_error ** 2, axis=1)
-        return chisq, gradient
+        if return_gradients:
+            return chisq, gradient
+        return chisq
+
+
+    def _prior(self, params):
+        for idx, p in enumerate(params):
+            e = getattr(self.planets[0], self._fit_labels[idx].split('.')[1] + '_error')
+            if (p < self.best_fit[idx] + e[0]) | (p > self.best_fit[idx] + e[1]):
+                return -np.inf
+        if params[self._is_eccen] < 0:
+            return -np.inf
+        if params[self._is_inc] > 90:
+            return -np.inf
+        return 0.0
+
+
+
+    @property
+    def _mcmc_starting_points(self):
+        ndim = len(self.best_fit)
+        # steps are 0.1% of the bound
+        pos = np.asarray([(((self.bounds[idx][1] - self.bounds[idx][0])/1000) * np.random.randn(self.nwalkers)/5) + self.best_fit[idx] for idx in range(ndim)]).T
+        # Nothing outside of physical...
+        pos[:, self._is_eccen] = np.abs(pos[:, self._is_eccen])
+        pos[:, self._is_inc] = 90 - np.abs(90 - pos[:, self._is_inc])
+
+        return pos
+
+
+    def fit_mcmc(self, time, flux, flux_err, threads=8):
+        ndim = len(self.best_fit)
+        # Work around for the starry pickle bug
+        global _wellfit_toy_model
+        _wellfit_toy_model = self
+
+        nll = lambda *args: -self._liklihood(*args)
+        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, _prob, args=(time, flux, flux_err), threads=threads)
+
+        width = 50
+        start = datetime.now()
+        dt = 0.
+        log.info('emcee fit')
+        log.info('----------\n')
+        idx = 0
+        for i, result in enumerate(sampler.sample(self._mcmc_starting_points, iterations=self.nsteps)):
+            if int(self.nsteps // i) == idx:
+                t = (datetime.now() - start).seconds / 60
+                dt = t/float(i + 1)
+                n = int((width+1) * float(i) / self.nsteps)
+                msg = "\r[{0}{1}] \t\t {2}mins / {3}mins".format('#' * n, ' ' * (width - n), np.round(t, 2), np.round(dt * self.nsteps, 2))
+                log.info(msg)
+            idx += 1
+        log.info("\n")
+
+        self.sampler = sampler
+        # Set my work around back to None, users shouldn't be able to interact with this stuff.
+        _wellfit_toy_model = None
+
+        log.info('{} / {} samples burned'.format(self.burnin, self.nsteps))
+        log.info('Setting results...')
+        ndim = len(self.best_fit)
+        samples = self.sampler.chain[:, self.burnin:, :].reshape((-1, ndim))
+        for label, ans in  zip(self._fit_labels, map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                                     zip(*np.percentile(samples, [16, 50, 84],
+                                                        axis=0)))):
+            self._update_planet([label], [ans[0]])
+            self._update_planet(['{}_error'.format(label)], [(-ans[1], ans[2])])
+
+
 
 
     def fit(self, time, flux, flux_error, **kwargs):
@@ -271,13 +379,56 @@ class Model(object):
             log.info(string)
 
         string = '    ' + ''.join(['{0:15s}'.format(f) for f in self._fit_labels])
-        string += ('{0:15s}'.format('Time (m)'))
         log.info('scipy.minimize fit')
         log.info('------------------\n')
         log.info(string)
         self.res = minimize(self._likelihood, self.initial_guess, args=(time, flux, flux_error),
                        jac=True, method='TNC', bounds=self.bounds, options=kwargs, callback=callback)
         self.best_fit = self.res.x
+
+
+
+    def print_results(self):
+        if 'sampler' not in self.__dir__():
+            raise ValueError("Please run wf.self.fit_mcmc() to find errors before printing results.")
+
+        df = pd.DataFrame(columns=['\textbf{Host Star}'])
+        df.loc['Radius', '\textbf{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.host.radius.value, self.host.radius_error[0], self.host.radius_error[1])
+        df.loc['Mass', '\textbf{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.host.mass.value, self.host.mass_error[0], self.host.mass_error[1])
+        df.loc['T_{eff}', '\textbf{Host Star}'] = '{} K $\pm$_{{{}}}^{{{}}}'.format(int(self.host.temperature.value), int(self.host.temperature_error[0]), int(self.host.temperature_error[1]))
+
+        idx = 0
+        cols = ['\textbf{{Planet {}}}'.format(utils.alphabet[idx + 1]) for idx in range(len(self.planets))]
+        df1 = pd.DataFrame(columns=cols)
+
+
+        for idx in range(len(self.planets)):
+            planet = self.planets[idx]
+            name = '\textbf{{Planet {}}}'.format(utils.alphabet[idx + 1])
+
+            df1.loc['Radius ($R_{jup}$)', name] = '{} $R_{{jup}}$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.radius.value, 2), np.round(planet.radius_error[0], 3), np.round(planet.radius_error[1], 3))
+            df1.loc['Period', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.period.value, 4), np.round(planet.period_error[0], 6), np.round(planet.period_error[1], 6))
+            df1.loc['Transit Midpoint', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.t0, 4), np.round(planet.t0_error[0], 6), np.round(planet.t0_error[1], 6))
+            df1.loc['Transit Duration', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.duration.value, 4), np.round(planet.duration_error[0], 6), np.round(planet.duration_error[1], 6))
+            df1.loc['R_p/R_*', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.rprs, 4), np.round(planet.rprs_error[0],6), np.round(planet.rprs_error[1], 6))
+            df1.loc['Inclination', name] = '{} $^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.inclination, 2), np.round(planet.inclination_error[0], 3), np.round(planet.inclination_error[1], 3))
+            df1.loc['Eccentricity', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.eccentricity, 2), np.round(planet.eccentricity_error[0], 3), np.round(planet.eccentricity_error[1], 3))
+            df1.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.separation, 2), np.round(planet.separation_error[0], 3), np.round(planet.separation_error[1], 3))
+
+
+        print('{}\n{}'.format(df.to_latex(escape=False), df1.to_latex(escape=False)))
+        return
+
+
+    def plot_corner(self):
+        if 'sampler' not in self.__dir__():
+            raise ValueError("Please run wf.self.fit_mcmc() before plotting a corner plot.")
+        log.info('{} / {} samples burned'.format(self.burnin, self.nsteps))
+        ndim = len(self.best_fit)
+        samples = self.sampler.chain[:, self.burnin:, :].reshape((-1, ndim))
+        cornerplot = corner.corner(samples, labels=self._fit_labels,
+                                   truths=self.best_fit)
+        return cornerplot
 
     def plot_bounds(self, time, flux, flux_error, n=500, ax=None):
         if ax is None:
@@ -301,7 +452,7 @@ class Model(object):
 
     def plot_results(self):
         if 'res' not in self.__dir__():
-            raise ValueError("Please run wf.model.fit() before plotting results.")
+            raise ValueError("Please run wf.self.fit() before plotting results.")
         n = self.nplanets
         npar = len(self.fit_params['planet'])
         if self.use_gps:
