@@ -118,7 +118,7 @@ class Model(object):
         self._is_inc = np.where([l.split('.')[1] == 'inclination' for l in self._fit_labels])[0]
         self.nwalkers = 100
         self.burnin = 200
-        self.nsteps = 400
+        self.nsteps = 1000
         # Work around for the starry pickle bug.
         global _wellfit_toy_model
         _wellfit_toy_model = None
@@ -342,15 +342,13 @@ class Model(object):
         dt = 0.
         log.info('emcee fit')
         log.info('----------\n')
-        idx = 0
         for i, result in enumerate(sampler.sample(self._mcmc_starting_points, iterations=self.nsteps)):
-            if int(self.nsteps // i) == idx:
+            if (i / int(self.nsteps/10)) == (i // int(self.nsteps/10)):
                 t = (datetime.now() - start).seconds / 60
                 dt = t/float(i + 1)
                 n = int((width+1) * float(i) / self.nsteps)
                 msg = "\r[{0}{1}] \t\t {2}mins / {3}mins".format('#' * n, ' ' * (width - n), np.round(t, 2), np.round(dt * self.nsteps, 2))
                 log.info(msg)
-            idx += 1
         log.info("\n")
 
         self.sampler = sampler
@@ -406,11 +404,11 @@ class Model(object):
             planet = self.planets[idx]
             name = '\textbf{{Planet {}}}'.format(utils.alphabet[idx + 1])
 
-            df1.loc['Radius ($R_{jup}$)', name] = '{} $R_{{jup}}$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.radius.value, 2), np.round(planet.radius_error[0], 3), np.round(planet.radius_error[1], 3))
+            df1.loc['Radius ($R_{jup}$)', name] = '{} $R_{{jup}}$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.radius.value, 3), np.round(planet.radius_error[0], 4), np.round(planet.radius_error[1], 4))
             df1.loc['Period', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.period.value, 4), np.round(planet.period_error[0], 6), np.round(planet.period_error[1], 6))
             df1.loc['Transit Midpoint', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.t0, 4), np.round(planet.t0_error[0], 6), np.round(planet.t0_error[1], 6))
             df1.loc['Transit Duration', name] = '{} $d$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.duration.value, 4), np.round(planet.duration_error[0], 6), np.round(planet.duration_error[1], 6))
-            df1.loc['R_p/R_*', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.rprs, 4), np.round(planet.rprs_error[0],6), np.round(planet.rprs_error[1], 6))
+            df1.loc['$R_p/R_*$', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.rprs, 4), np.round(planet.rprs_error[0],6), np.round(planet.rprs_error[1], 6))
             df1.loc['Inclination', name] = '{} $^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.inclination, 2), np.round(planet.inclination_error[0], 3), np.round(planet.inclination_error[1], 3))
             df1.loc['Eccentricity', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.eccentricity, 2), np.round(planet.eccentricity_error[0], 3), np.round(planet.eccentricity_error[1], 3))
             df1.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(planet.separation, 2), np.round(planet.separation_error[0], 3), np.round(planet.separation_error[1], 3))
@@ -429,6 +427,16 @@ class Model(object):
         cornerplot = corner.corner(samples, labels=self._fit_labels,
                                    truths=self.best_fit)
         return cornerplot
+
+    def plot_burnin(self):
+        ndim = len(self.best_fit)
+        fig, axs = plt.subplots(ndim, figsize=(10, 16))
+        for i in range(ndim):
+            _ = axs[i].plot(self.sampler.chain[:, 0:, i].T, alpha=0.1, color='k');
+            axs[i].set_ylabel(self._fit_labels[i])
+            axs[i].axvline(self.burnin)
+        return fig
+
 
     def plot_bounds(self, time, flux, flux_error, n=500, ax=None):
         if ax is None:
