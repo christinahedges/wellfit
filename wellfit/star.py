@@ -46,7 +46,7 @@ class Star(object):
         if len(t) == 0:
             raise WellFitException('Can not find limb darkening parameters. This should not happen. Please report this error.')
         self.limb_darkening = [t.iloc[0].u, t.iloc[0].a]
-        #self._validate()
+        self._validate()
 
         self._init_model = starry.kepler.Primary()
 
