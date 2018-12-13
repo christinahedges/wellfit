@@ -22,13 +22,11 @@ units = {'mass': getattr(u, 'solMass'),
 class Star(object):
     '''Primary star class'''
 
-    def __init__(self, radius=1, mass=1, temperature=5777,
-                 radius_error=(-0.1, 0.1), mass_error=(-0.1, 0.1), temperature_error=(-500, 500), luminosity=None, luminosity_error=None):
+    def __init__(self, radius=1, temperature=5777, mass=None, luminosity=None,
+                 radius_error=(-0.1, 0.1), temperature_error=(-500, 500), mass_error=(-0.1, 0.1), luminosity_error=None):
         self.radius = u.Quantity(radius, u.solRad)
-        self.mass = u.Quantity(mass, u.solMass)
         self.temperature = u.Quantity(temperature, u.K)
         self.radius_error = radius_error
-        self.mass_error = mass_error
         self.temperature_error = temperature_error
 
         if luminosity is not None:
@@ -36,10 +34,21 @@ class Star(object):
         else:
             self.luminosity = self._luminosity
 
-        if luminosity is not None:
+        if mass_error is not None:
             self.luminosity_error = luminosity_error
         else:
             self.luminosity_error = self._luminosity_error
+
+
+        if mass is not None:
+            self.mass = mass
+        else:
+            self.mass = self._mass
+
+        if mass_error is not None:
+            self.mass_error = mass_error
+        else:
+            self.mass_error = self._mass_error
 
 
         t = ld_table[(ld_table.teff == (self.temperature.value)//250 * 250) & (ld_table.met == 0) & (ld_table.logg == 5)]
@@ -49,6 +58,26 @@ class Star(object):
         self._validate()
 
         self._init_model = starry.kepler.Primary()
+
+
+    @property
+    def _mass(self):
+        '''ZAMS Mass'''
+        mass = ((self.luminosity)/1.15)**(1/3.36)
+        if hasattr(mass, 'unit'):
+            return mass.value * u.solMass
+        return mass * u.solMass
+
+    @property
+    def _mass_error(self):
+        '''ZAMS Mass error'''
+        l = self.luminosity
+        if hasattr(l, 'unit'):
+            l = l.value
+
+        e = (((l + self.luminosity_error[0])/1.15)**(1/3.36) - self.mass.value,
+                 ((l + self.luminosity_error[1])/1.15)**(1/3.36) - self.mass.value)
+        return e
 
     @property
     def _luminosity(self):

@@ -50,7 +50,7 @@ class Planet(object):
 
     def _validate_errors(self):
         '''Ensure the bounds are physical'''
-        for key in ['rprs_error', 'period_error', 't0_error', 'inclination_error', 'eccentricity_error']:
+        for key in ['rprs_error', 'period_error', 't0_error', 'inclination_error', 'eccentricity_error', 'omega_error']:
             if getattr(self,key) is None:
                 setattr(self, key, default_bounds[key])
             if ~np.isfinite(getattr(self,key)[0]):
