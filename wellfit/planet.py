@@ -112,7 +112,8 @@ class Planet(object):
         df.loc['Inclination', name] = '{} $^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.inclination, 2), np.round(self.inclination_error[0], 3), np.round(self.inclination_error[1], 3))
         df.loc['Eccentricity', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.eccentricity, 2), np.round(self.eccentricity_error[0], 3), np.round(self.eccentricity_error[1], 3))
         df.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.separation, 2), np.round(self.separation_error[0], 3), np.round(self.separation_error[1], 3))
-        df.loc['Equillibrium Temperature ($K$)', name] = '{} $K$ $\pm$_{{{}}}^{{{}}}'.format(int(self.effective_temperature.value), int(self.effective_temperature_error[0]), int(self.effective_temperature_error[1]))
+        df.loc['Separation ($a/R_*$)', name] = '{} $\pm$_{{{}}}^{{{}}}'.format(np.round(self.separation, 2), np.round(self.separation_error[0], 3), np.round(self.separation_error[1], 3))
+        df.loc['Longitude of Ascending Node ($^\circ$)', name] = '{}$^\circ$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.omega, 2), np.round(self.omega_error[0], 3), np.round(self.omega_error[1], 3))
         return df
 
     @property

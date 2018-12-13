@@ -13,7 +13,8 @@ from .utils import ld_table, WellFitException
 
 units = {'mass': getattr(u, 'solMass'),
          'radius': getattr(u, 'solRad'),
-         'temperature': getattr(u, 'K')}
+         'temperature': getattr(u, 'K'),
+         'luminosity':getattr(u, 'solLum')}
 
 default_bounds = {'radius_error':(-0.1, 0.1), 'mass_error':(-0.1, 0.1), 'temperature_error':(-500, 500), 'limb_darkening_error':(-0.1,0.1)}
 
@@ -22,7 +23,7 @@ class Star(object):
     '''Primary star class'''
 
     def __init__(self, radius=1, mass=1, temperature=5777,
-                 radius_error=None, mass_error=None, temperature_error=None):
+                 radius_error=None, mass_error=None, temperature_error=None, luminosity=None, luminosity_error=None):
         self.radius = u.Quantity(radius, u.solRad)
         self.mass = u.Quantity(mass, u.solMass)
         self.temperature = u.Quantity(temperature, u.K)
@@ -30,17 +31,36 @@ class Star(object):
         self.mass_error = mass_error
         self.temperature_error = temperature_error
 
+        if luminosity is not None:
+            self.luminosity = luminosity
+        else:
+            @property
+            def luminosity(self):
+                return (4 * np.pi * self.radius**2 * sigma_sb * self.temperature**4).to(u.solLum)
+
+        if luminosity_error is not None:
+            self.luminosity_error = luminosity_error
+        else:
+            @property
+            def luminosity_error(self):
+                e = []
+                for idx in [0, 1]:
+                    r = self.radius + self.radius_error[idx] * self.radius.unit
+                    t = self.temperature + self.temperature_error[idx] * self.temperature.unit
+                    e.append(((4 * np.pi * r**2 * sigma_sb * t**4).to(u.solLum) - self.luminosity).value)
+                return tuple(e)
+
+
         t = ld_table[(ld_table.teff == (self.temperature.value)//250 * 250) & (ld_table.met == 0) & (ld_table.logg == 5)]
         if len(t) == 0:
             raise WellFitException('Can not find limb darkening parameters. This should not happen. Please report this error.')
         self.limb_darkening = [t.iloc[0].u, t.iloc[0].a]
-        print(self.limb_darkening)
         self._validate()
 
         self._init_model = starry.kepler.Primary()
 
     def __repr__(self):
-        return ('Star: {}, {}, {}'.format(self.radius, self.mass, self.temperature))
+        return ('Star: {}, {}, {}, {}'.format(self.radius, self.mass, self.temperature, self.luminosity))
 
     def _validate(self):
         '''Ensures unit convention is obeyed'''
@@ -72,8 +92,8 @@ class Star(object):
     def properties(self):
 
         df = pd.DataFrame(columns=['\emph{Host Star}'])
-        df.loc['Radius', '\emph{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.radius.value, self.radius_error[0], self.radius_error[1])
-        df.loc['Mass', '\emph{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(self.mass.value, self.mass_error[0], self.mass_error[1])
+        df.loc['Radius', '\emph{Host Star}'] = '{} R$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.radius.value, 3), np.round(self.radius_error[0], 4), np.round(self.radius_error[1], 4))
+        df.loc['Mass', '\emph{Host Star}'] = '{} M$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.mass.value, 3), np.round(self.mass_error[0], 4), np.round(self.mass_error[1], 4))
         df.loc['T_{eff}', '\emph{Host Star}'] = '{} $K$ $\pm$_{{{}}}^{{{}}}'.format(int(self.temperature.value), int(self.temperature_error[0]), int(self.temperature_error[1]))
         df.loc['Luminosity', '\emph{Host Star}'] = '{} L$_\odot$ $\pm$_{{{}}}^{{{}}}'.format(np.round(self.luminosity.value, 3), np.round(self.luminosity_error[0], 3), np.round(self.luminosity_error[1], 3))
         df.loc['Limb Darkening 1 ($u$)', '\emph{Host Star}'] = '{}'.format(np.round(self.limb_darkening[0], 2))
@@ -89,16 +109,3 @@ class Star(object):
 
     def show(self):
         self.model.show()
-
-    @property
-    def luminosity(self):
-        return (4 * np.pi * self.radius**2 * sigma_sb * self.temperature**4).to(u.solLum)
-
-    @property
-    def luminosity_error(self):
-        e = []
-        for idx in [0, 1]:
-            r = self.radius + self.radius_error[idx] * self.radius.unit
-            t = self.temperature + self.temperature_error[idx] * self.temperature.unit
-            e.append(((4 * np.pi * r**2 * sigma_sb * t**4).to(u.solLum) - self.luminosity).value)
-        return tuple(e)
