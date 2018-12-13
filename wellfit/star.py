@@ -34,30 +34,35 @@ class Star(object):
         if luminosity is not None:
             self.luminosity = luminosity
         else:
-            @property
-            def luminosity(self):
-                return (4 * np.pi * self.radius**2 * sigma_sb * self.temperature**4).to(u.solLum)
+            self.luminosity = self._luminosity
 
-        if luminosity_error is not None:
+        if luminosity is not None:
             self.luminosity_error = luminosity_error
         else:
-            @property
-            def luminosity_error(self):
-                e = []
-                for idx in [0, 1]:
-                    r = self.radius + self.radius_error[idx] * self.radius.unit
-                    t = self.temperature + self.temperature_error[idx] * self.temperature.unit
-                    e.append(((4 * np.pi * r**2 * sigma_sb * t**4).to(u.solLum) - self.luminosity).value)
-                return tuple(e)
+            self.luminosity_error = self._luminosity_error
 
 
         t = ld_table[(ld_table.teff == (self.temperature.value)//250 * 250) & (ld_table.met == 0) & (ld_table.logg == 5)]
         if len(t) == 0:
             raise WellFitException('Can not find limb darkening parameters. This should not happen. Please report this error.')
         self.limb_darkening = [t.iloc[0].u, t.iloc[0].a]
-        self._validate()
+        #self._validate()
 
         self._init_model = starry.kepler.Primary()
+
+    @property
+    def _luminosity(self):
+        return (4 * np.pi * self.radius**2 * sigma_sb * self.temperature**4).to(u.solLum)
+
+    @property
+    def _luminosity_error(self):
+        e = []
+        for idx in [0, 1]:
+            r = self.radius + self.radius_error[idx] * self.radius.unit
+            t = self.temperature + self.temperature_error[idx] * self.temperature.unit
+            e.append(((4 * np.pi * r**2 * sigma_sb * t**4).to(u.solLum) - self.luminosity).value)
+        return tuple(e)
+
 
     def __repr__(self):
         return ('Star: {}, {}, {}, {}'.format(self.radius, self.mass, self.temperature, self.luminosity))
