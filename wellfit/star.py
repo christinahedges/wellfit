@@ -16,14 +16,14 @@ units = {'mass': getattr(u, 'solMass'),
          'temperature': getattr(u, 'K'),
          'luminosity':getattr(u, 'solLum')}
 
-default_bounds = {'radius_error':(-0.1, 0.1), 'mass_error':(-0.1, 0.1), 'temperature_error':(-500, 500), 'limb_darkening_error':(-0.1,0.1)}
+#default_bounds = {'radius_error':(-0.1, 0.1), 'mass_error':(-0.1, 0.1), 'temperature_error':(-500, 500), 'limb_darkening_error':(-0.1,0.1)}
 
 
 class Star(object):
     '''Primary star class'''
 
     def __init__(self, radius=1, mass=1, temperature=5777,
-                 radius_error=None, mass_error=None, temperature_error=None, luminosity=None, luminosity_error=None):
+                 radius_error=(-0.1, 0.1), mass_error=(-0.1, 0.1), temperature_error=(-500, 500), luminosity=None, luminosity_error=None):
         self.radius = u.Quantity(radius, u.solRad)
         self.mass = u.Quantity(mass, u.solMass)
         self.temperature = u.Quantity(temperature, u.K)
@@ -76,8 +76,8 @@ class Star(object):
     def _validate_errors(self):
         '''Ensure the bounds are physical'''
         for key in ['radius_error', 'mass_error', 'temperature_error']:
-            if getattr(self,key) is None:
-                setattr(self, key, default_bounds[key])
+#            if getattr(self,key) is None:
+#                setattr(self, key, default_bounds[key])
             if ~np.isfinite(getattr(self,key)[0]):
                 setattr(self,  key, tuple([default_bounds[key][0], getattr(self, key)[1]]))
             if ~np.isfinite(getattr(self, key)[1]):
