@@ -42,7 +42,7 @@ def _prob(params, time, flux, flux_error):
 
 
 #['log_sigma', 'log_rho']
-fit_params =  {'host':[], 'planet':['rprs', 'period', 't0', 'inclination', 'eccentricity', 'omega'], 'GP':['log_sigma', 'log_rho']}
+fit_params =  {'host':[], 'planet':['rprs', 'period', 't0', 'inclination', 'eccentricity'], 'GP':['log_sigma', 'log_rho']}
 
 
 class Model(object):
