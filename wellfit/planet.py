@@ -22,6 +22,7 @@ class Planet(object):
                      rprs_error=None, period_error=None, t0_error=None, inclination_error=None, omega_error=None, eccentricity_error=None):
         self.host = host
         self.rprs = rprs
+        self._init_rprs = rprs
         self.period = u.Quantity(period, u.day)
         self.t0 = t0
         self.inclination = inclination
@@ -58,6 +59,9 @@ class Planet(object):
                 setattr(self,  key, tuple([default_bounds[key][0], getattr(self, key)[1]]))
             if ~np.isfinite(getattr(self, key)[1]):
                 setattr(self,  key, tuple([getattr(self, key)[0], default_bounds[key][1]]))
+
+        if self.rprs + self.rprs_error[0] < 0:
+            self.rprs_error = tuple([-self._init_rprs, self.rprs_error[1]])
 
         if self.eccentricity + self.eccentricity_error[0] < 0:
             self.eccentricity_error = tuple([-self._init_eccentricity, self.eccentricity_error[1]])
