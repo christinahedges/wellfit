@@ -27,6 +27,7 @@ class Planet(object):
         self.inclination = inclination
         self._init_inclination = inclination
         self.omega = omega
+        self._init_omega = omega
         self.eccentricity = eccentricity
         self._init_eccentricity = eccentricity
         self.lum = lum
@@ -63,6 +64,12 @@ class Planet(object):
 
         if self.eccentricity + self.eccentricity_error[1] > 1:
             self.eccentricity_error = tuple([self.eccentricity_error[0], 1 - self._init_eccentricity])
+
+        if self.omega + self.omega_error[0] < 0:
+            self.omega_error = tuple([-self._init_omega, self.omega_error[1]])
+
+        if self.omega + self.omega_error[1] > 1:
+            self.omega_error = tuple([self.omega_error[0], 1 - self._init_omega])
 
         if self.inclination + self.inclination_error[1] > 90.:
             self.inclination_error = tuple([self.inclination_error[0], 90. - self._init_inclination])
