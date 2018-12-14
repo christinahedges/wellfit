@@ -4,6 +4,8 @@ import starry
 import astropy.units as u
 import numpy as np
 import pandas as pd
+import pickle
+import os
 from .utils import sep, alphabet
 
 from astropy.constants import sigma_sb
@@ -18,7 +20,7 @@ class Planet(object):
     '''Companion class
     '''
 
-    def __init__(self, host=None, rprs=0.01, period=10, t0=0, inclination=90, omega=0, eccentricity=0, multi=False, lum=0,
+    def __init__(self, host=None, rprs=0.01, period=10, t0=0, inclination=90, omega=0, eccentricity=0, lum=0,
                      rprs_error=None, period_error=None, t0_error=None, inclination_error=None, omega_error=None, eccentricity_error=None):
         self.host = host
         self.rprs = rprs
@@ -42,8 +44,10 @@ class Planet(object):
         self.omega_error = omega_error
 
         self._validate()
+        self._initialize_model()
 
-        self._init_model = starry.kepler.Secondary(lmax=1, multi=multi)
+    def _initialize_model(self):
+        self._init_model = starry.kepler.Secondary(lmax=1)
 
     def _validate(self):
         '''Ensures unit convention is obeyed'''
@@ -114,6 +118,17 @@ class Planet(object):
                       rprs_error=rprs_error, period_error=period_error, t0_error=t0_error, inclination_error=inclination_error,
                       eccentricity_error=eccentricity_error)
 
+    @staticmethod
+    def read(fname):
+        '''Read a planet model written by the Star.write() method.
+        '''
+        planet = pickle.load(open(fname, 'rb'))
+        if not isinstance(planet, Planet):
+            raise ValueError('{} does not contain a wellfit.planet.Planet'.format(fname))
+        planet._initialize_model()
+        planet.host._initialize_model()
+        return planet
+
     @property
     def properties(self):
         name = '\emph{Planet}'
@@ -133,15 +148,18 @@ class Planet(object):
 
     @property
     def model(self):
-        self._init_model.L = self.lum
-        self._init_model.ecc = self.eccentricity
-        self._init_model.r = self.rprs
-        self._init_model.porb = u.Quantity(self.period, u.day).value
-        self._init_model.a = self.separation
-        self._init_model.Omega = self.omega
-        self._init_model.tref = self.t0
-        self._init_model.inc = self.inclination
-        return self._init_model
+        if self._init_model is None:
+            return None
+        else:
+            self._init_model.L = self.lum
+            self._init_model.ecc = self.eccentricity
+            self._init_model.r = self.rprs
+            self._init_model.porb = u.Quantity(self.period, u.day).value
+            self._init_model.a = self.separation
+            self._init_model.Omega = self.omega
+            self._init_model.tref = self.t0
+            self._init_model.inc = self.inclination
+            return self._init_model
 
     @property
     def separation(self):
@@ -209,6 +227,18 @@ class Planet(object):
             e.append((e1 - self.effective_temperature).value)
         return tuple(e)
 
+
+    def write(self, fname='out.wf.planet', overwrite=False):
+        '''Write a planet class to a binary file. Note that since starry models cannot
+        be pickled, this is the only way to write a Star. To read it back in, you
+        must use the read function.'''
+        if os.path.isfile(fname) & (not overwrite):
+            raise ValueError('File exists. Please set overwrite to True or choose another file name.')
+        self._init_model = None
+        self.host._init_model = None
+        pickle.dump(self, open(fname, 'wb'))
+        self._initialize_model()
+        self.host._initialize_model()
 
     def __repr__(self):
         return ('Planet: RpRs {} , P {}, t0 {}'.format(self.rprs, self.period,self.t0))

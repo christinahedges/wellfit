@@ -9,6 +9,8 @@ import string
 from datetime import datetime
 import pandas as pd
 import sys
+import os
+import pickle
 
 from scipy.optimize import minimize
 
@@ -70,10 +72,6 @@ class Model(object):
         else:
             self.planets = [planets]
 
-        if (planets is None) & (host is None):
-            self.system = None
-        else:
-            self.system = starry.kepler.System(self.host.model, *[p.model for p in self.planets])
         self.nplanets = len(self.planets)
 
         for planet in self.planets:
@@ -87,6 +85,7 @@ class Model(object):
         self._best_guess = l
         self.initial_guess = l
 
+        self.system = None
 
         if self.use_gps:
             log.info('Using Gaussian Process to fit long term trends. This will make fitting slower, but more accurate.')
@@ -121,8 +120,13 @@ class Model(object):
         # Work around for the starry pickle bug.
         global _wellfit_toy_model
         _wellfit_toy_model = None
+        self._initialize_system()
 
-
+    def _initialize_system(self):
+        if (self.planets is None) & (self.host is None):
+            self.system = None
+        else:
+            self.system = starry.kepler.System(self.host.model, *[p.model for p in self.planets])
 
 
     def __repr__(self):
@@ -150,6 +154,18 @@ class Model(object):
             planets.append(Planet(host).from_nexsci(name+letter, host))
         return Model(host, planets, **kwargs)
 
+    @staticmethod
+    def read(fname):
+        '''Read a wf.model written by the Model.write() method.
+        '''
+        model = pickle.load(open(fname, 'rb'))
+        if not isinstance(model, Model):
+            raise ValueError('{} does not contain a wellfit.model.Model'.format(fname))
+        for p in model.planets:
+            p._initialize_model()
+        model.host._initialize_model()
+        model._initialize_system()
+        return model
 
     @property
     def _gradient_labels(self):
@@ -220,6 +236,8 @@ class Model(object):
 
 
     def _update_model(self):
+        if self.system is None:
+            pass
         for p in range(self.nplanets):
             self.system.secondaries[p].ecc = self.planets[p].eccentricity
             self.system.secondaries[p].r = self.planets[p].rprs
@@ -360,6 +378,7 @@ class Model(object):
         self._best_guess = ans
         self.best_fit = ans
 
+
     def fit_mcmc(self, time, flux, flux_err, threads=8):
         #self._best_guess = self.best_fit
         ndim = len(self.best_fit)
@@ -395,13 +414,7 @@ class Model(object):
         self._assign()
 
 
-
-
-
     def to_latex(self):
-#        if 'sampler' not in self.__dir__():
-#            raise ValueError("Please run wf.self.fit_mcmc() to find errors before printing results.")
-
         host_df = self.host.properties
 
         planet_df = None
@@ -439,8 +452,6 @@ class Model(object):
                 axs[i].axhline(self.bounds[i][0], ls='--')
                 axs[i].axhline(self.bounds[i][1], ls='--')
                 axs[i].axhline(self.best_fit[i])
-
-
         return fig
 
 
@@ -499,3 +510,20 @@ class Model(object):
 
             for idx in range(idx + 1, npar):
                 fig.delaxes(ax[jdx, idx])
+
+
+    def write(self, fname='out.wf.model', overwrite=False):
+        '''Write a planet class to a binary file. Note that since starry models cannot
+        be pickled, this is the only way to write a Star. To read it back in, you
+        must use the read function.'''
+        if os.path.isfile(fname) & (not overwrite):
+            raise ValueError('File exists. Please set overwrite to True or choose another file name.')
+        self.system = None
+        for p in self.planets:
+            p._init_model = None
+        self.host._init_model = None
+        pickle.dump(self, open(fname, 'wb'))
+        for p in self.planets:
+            p._initialize_model()
+        self.host._initialize_model()
+        self._initialize_system()
