@@ -33,7 +33,6 @@ import logging
 logging.basicConfig(format='%(message)s')
 log = logging.getLogger('WELLFIT')
 
-
 # We should have a better dependency than CT for this.
 # This is just to get the NExSci data table.
 import characterizethis as ct

@@ -6,3 +6,6 @@ import os
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
 
 from . import wellfit
+from .planet import Planet
+from .star import Star
+from .model import Model

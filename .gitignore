@@ -3,3 +3,4 @@ mastDownload
 __pycache__
 dev/
 wellfit.egg-info
+.pytest_cache/
