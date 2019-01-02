@@ -5,6 +5,7 @@ matplotlib>=1.5.3
 tqdm
 lightkurve
 celerite
+emcee
 starry
 pandas
 characterizethis
