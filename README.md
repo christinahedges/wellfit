@@ -1,3 +1,5 @@
+[![PyPI version](https://badge.fury.io/py/wellfit.svg)](https://badge.fury.io/py/wellfit)
+
 # WellFit
 
 Transit modeling with [`starry`](https://rodluger.github.io/starry/) and [`celerite`](https://celerite.readthedocs.io/en/stable/), capitalizing on gradients. Under development.
@@ -17,3 +19,10 @@ pip install -e .
 ```
 
 This will install in "development" mode, so you can edit the wellfit code and your changes will automatically run.
+
+
+You can now also install with pip!
+
+```
+pip install wellfit
+```
