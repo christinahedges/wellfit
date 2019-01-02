@@ -34,7 +34,7 @@ class Star(object):
         else:
             self.luminosity = get_luminosity(self)
 
-        if mass_error is not None:
+        if luminosity_error is not None:
             self.luminosity_error = luminosity_error
         else:
             self.luminosity_error = get_luminosity_error(self)
