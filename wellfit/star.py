@@ -60,7 +60,7 @@ class Star(object):
 
 
     def _initialize_model(self):
-        self._init_model = starry.kepler.Primary()
+        self._init_model = starry.kepler.Primary(lmax=5)
 
 
     def __repr__(self):
