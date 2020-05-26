@@ -3,11 +3,11 @@ python:
   - 3.6
 
 before_install:  # optional dependencies
-  - pip install codecov
-  - pip install pytest-cov
-  - pip install sphinx_rtd_theme
-  - pip install numpydoc
-  - pip install pandas
+#  - pip install codecov
+#  - pip install pytest-cov
+#  - pip install sphinx_rtd_theme
+#  - pip install numpydoc
+#  - pip install pandas
 
 install:
   - pip install -r requirements.txt
@@ -23,4 +23,4 @@ script:
   - pytest
 
 after_success:
-  - codecov
+#  - codecov
